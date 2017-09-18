@@ -1,0 +1,10 @@
+P: 0.220384
+T: 2457772.12388400
+K: 8.00
+Tref: 2458000.2627764
+user_phase: [0.5, 0.1]
+dates: ['2017-09-23','2017-09-24', '2017-09-25', '2017-09-26']
+night_start: '20:00'
+night_duration: 10.0
+visibility_start: '21:00'
+visibility_duration: 5.50
