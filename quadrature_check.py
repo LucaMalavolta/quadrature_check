@@ -23,8 +23,17 @@ parser = argparse.ArgumentParser(prog='quadrature_check.py', description='quadra
 parser.add_argument('config_file', type=str, nargs=1, help='config file')
 args = parser.parse_args()
 file_conf = args.config_file[0]
-stream = file(file_conf, 'r')
-config_in = yaml.load(stream)
+stream = open(file_conf, 'r')
+
+
+try:
+    config_in = yaml.load(stream, Loader=yaml.FullLoader)
+except AttributeError:
+    config_in = yaml.load(stream)
+    print(' Consider updating YAML')
+except:
+    print(' Some error happened while reading the configuration file')
+    quit()
 
 accepted_extensions = ['.yaml', '.yml', '.conf', '.config', '.input', ]
 for extension in accepted_extensions:
@@ -42,10 +51,23 @@ if 'quadrature_window' not in config_in: config_in['quadrature_window'] = 0.05
 if 'visibility_start' not in config_in: config_in['visibility_start'] = '18:00'
 if 'visibility_duration' not in config_in: config_in['visibility_duration'] = 14.00
 
-for planet_name, planet in planets.iteritems():
+if len(planets) > 1:
+    multiplanets = True
+else:
+    multiplanets = False
+
+if 'plot_planets' not in config_in: config_in['plot_planets'] = config_in['planets']
+
+
+for planet_name, planet in planets.items():
 
     if 'R' not in planet: planet['R'] = 2.6
-    if 'e' not in planet: planet['e'] = 0.00000
+    if 'e' not in planet:
+        planet['keplerian'] = True
+        planet['e'] = 0.00000
+    else:
+        planet['e'] = False
+
     if 'o' not in planet: planet['o'] = np.asarray(np.pi/2.)
     if 'i' not in planet: planet['i'] = 90.000
     if 'K' not in planet: planet['K'] = 1.000
@@ -53,10 +75,10 @@ for planet_name, planet in planets.iteritems():
     if 'quadrature_window' not in planet: planet['quadrature_window'] = config_in['quadrature_window']
 
     if 'user_phase' not in planet:
-        print_user = 0
+        planet['print_phase'] = False
         planet['user_phase'] = [0.6, 0.01]
     else:
-        print_user = 1
+        planet['print_phase'] = True
 
     planet['T0'] = (planet['T'] - config_in['Tref']) % planet['P']
     planet['f'] = 0.0
@@ -67,6 +89,15 @@ for planet_name, planet in planets.iteritems():
         if planet['f'] < 0.00:
             planet['f'] += 2 * np.pi
     planet['mA'] = planet['f'] - planet['o']
+
+#for planet_name, planet in planets.items():
+for planet_name in config_in['plot_planets']:
+
+    planet = planets[planet_name]
+
+
+    print()
+    print(' *** Planet ', planet_name, ' *** ')
 
     single_orbit_bjd = np.arange(-0.5, 1.5, 0.001, dtype=np.double)
     single_orbit_RV = kp.kepler_RV_T0P(single_orbit_bjd, planet['f'], 1.00000, 1.0000, planet['e'], planet['o'])
@@ -82,7 +113,7 @@ for planet_name, planet in planets.iteritems():
         single_orbit_bjd[np.where(single_orbit_bjd > phase_upper_quadrature-planet['quadrature_window'])[0][0]],
         single_orbit_bjd[np.where(single_orbit_bjd < phase_upper_quadrature+planet['quadrature_window'])[0][-1]]]
 
-    print 'first upper quadrature since reference time --> ', upper_quad
+    print('first upper quadrature since reference time --> ', upper_quad)
 
     #lower_quad = [single_orbit_bjd[np.where(single_orbit_RV < planet['quadrature_window']-1.0)[0][0]],
     #              single_orbit_bjd[np.where(single_orbit_RV < planet['quadrature_window']-1.0)[0][-1]]]
@@ -91,13 +122,13 @@ for planet_name, planet in planets.iteritems():
         single_orbit_bjd[np.where(single_orbit_bjd > phase_lower_quadrature-planet['quadrature_window'])[0][0]],
         single_orbit_bjd[np.where(single_orbit_bjd < phase_lower_quadrature+planet['quadrature_window'])[0][-1]]]
 
-    print 'first lower quadrature since reference time --> ', lower_quad
+    print('first lower quadrature since reference time --> ', lower_quad)
 
     input_user = [
         single_orbit_bjd[np.where(single_orbit_bjd > planet['user_phase'][0] - planet['user_phase'][1])[0][0]],
         single_orbit_bjd[np.where(single_orbit_bjd < planet['user_phase'][0] + planet['user_phase'][1])[0][-1]]]
 
-    print 'first user input phase since reference time --> ', input_user
+    print('first user input phase since reference time --> ', input_user)
 
 
     if lower_quad[0] < upper_quad[0]:
@@ -117,7 +148,7 @@ for planet_name, planet in planets.iteritems():
         order_dict = {0: 'upper', 1: 'lower', 2: 'user'}
         if input_user[0] <= lower_quad[1]:
             input_user[0] = lower_quad[1]
-    print
+    print()
 
     for date in config_in['dates']:
 
@@ -130,6 +161,14 @@ for planet_name, planet in planets.iteritems():
         bjd= np.arange(observing_interval[0], observing_interval[1], planet['P']/100.)
         RV = kp.kepler_RV_T0P(bjd-config_in['Tref'], planet['f'], planet['P'], planet['K'], planet['e'], planet['o'])
 
+        if multiplanets:
+            RV_all = RV * 0.0
+            for pp_name, pp in planets.items():
+                RV_all += kp.kepler_RV_T0P(bjd-config_in['Tref'], pp['f'], pp['P'], pp['K'], pp['e'], pp['o'])
+
+
+
+
         user_pos = -1
 
         #fig = plt.figure(figsize=(12, 12))
@@ -141,7 +180,7 @@ for planet_name, planet in planets.iteritems():
 
         trans = mtransforms.blended_transform_factory(ax.transData, ax.transAxes)
 
-        print ' ---------- night: ', date , ' ---------- '
+        print(' ---------- night: ', date , ' ---------- ')
 
         obs_times = open(yaml_name + '_' + date + '_' + planet_name + '.dat', 'w')
         obs_times.write(' ---------- night: '+ date + ' ----------  \n')
@@ -160,7 +199,7 @@ for planet_name, planet in planets.iteritems():
         ax.fill_between(before_rising, 0, 1, facecolor='black', alpha=0.7, transform=trans, zorder=10)
         ax.fill_between(after_setting, 0, 1, facecolor='black', alpha=0.7, transform=trans, zorder=10)
 
-        for ii in xrange(index_ref[0]-1, index_ref[1]+1):
+        for ii in range(index_ref[0]-1, index_ref[1]+1):
             upper_quad_day = [(i+ii)*planet['P']+config_in['Tref'] for i in upper_quad]
             lower_quad_day = [(i+ii)*planet['P']+config_in['Tref'] for i in lower_quad]
             input_user_day = [(i + ii) * planet['P'] + config_in['Tref'] for i in input_user]
@@ -174,14 +213,14 @@ for planet_name, planet in planets.iteritems():
             plot_input = [dateutil.parser.parse(s) for s in t_input_user.iso]
 
             for i in [0, 1, 2]:
-                if order_dict[i] == 'user' and print_user>0 and \
+                if order_dict[i] == 'user' and planet['print_phase'] and \
                                 input_user_day[1] > visibility_interval[0] and \
                                 input_user_day[0] < visibility_interval[1]:
                     obs_times.write('USER INPUT PHASE start: %s ( %f)  end: %s (%f) \n' % (
                         t_input_user.iso[0], input_user_day[0], t_input_user.iso[1], input_user_day[1]))
                     ax.axvline(plot_input[0], c='green')
                     ax.axvline(plot_input[1], c='green')
-                    ax.fill_between(plot_input, 0, 1, facecolor='green', alpha=0.5, transform=trans)
+                    ax.fill_between(plot_input, 0, 1, facecolor='green', alpha=0.5, transform=trans,  label='User-defined phase')
 
                 if order_dict[i] == 'upper' and \
                                 upper_quad_day[1] > visibility_interval[0] and \
@@ -190,7 +229,7 @@ for planet_name, planet in planets.iteritems():
                         t_upper_quad.iso[0], upper_quad_day[0], t_upper_quad.iso[1], upper_quad_day[1]))
                     ax.axvline(plot_upper[0], c='r')
                     ax.axvline(plot_upper[1], c='r')
-                    ax.fill_between(plot_upper, 0, 1, facecolor='red', alpha=0.5, transform=trans)
+                    ax.fill_between(plot_upper, 0, 1, facecolor='red', alpha=0.5, transform=trans, label='Upper quadrature')
 
                 if order_dict[i] == 'lower' and \
                                 lower_quad_day[1] > visibility_interval[0] and \
@@ -199,11 +238,11 @@ for planet_name, planet in planets.iteritems():
                         t_lower_quad.iso[0], lower_quad_day[0], t_lower_quad.iso[1], lower_quad_day[1]))
                     ax.axvline(plot_lower[0], c='b')
                     ax.axvline(plot_lower[1], c='b')
-                    ax.fill_between(plot_lower, 0, 1, facecolor='blue', alpha=0.5, transform=trans)
-
-        print
+                    ax.fill_between(plot_lower, 0, 1, facecolor='blue', alpha=0.5, transform=trans, label='Lower quadrature')
 
         t_bjd = Time(bjd, format='jd')
+        #t_bjd.format = 'isot'
+
         plot_bjd = [dateutil.parser.parse(s) for s in t_bjd.iso]
 
 
@@ -218,7 +257,7 @@ for planet_name, planet in planets.iteritems():
 
         time_start = dateutil.parser.parse(date+'T'+config_in['night_start'])
         hours_ticks = [time_start + dateutil.relativedelta.relativedelta(hours=i) for i in
-                      xrange(0, int(config_in['night_duration']))]
+                      range(0, int(config_in['night_duration']))]
 
 
         plt.subplots_adjust(bottom=0.2)
@@ -227,8 +266,8 @@ for planet_name, planet in planets.iteritems():
 
         #plt.autoscale(tight=True)
 
-        #xfmt = md.DateFormatter('%H:%M')
         ax.xaxis.set_major_formatter(md.DateFormatter('%H:%M'))
+        #ax.xaxis.set_major_formatter(md.DateFormatter('%d/%m  %H:%M'))
         #ax.xaxis.set_minor_formatter(md.DateFormatter('%M'))
 
         ax.xaxis.set_major_locator(md.MinuteLocator(byminute=[0,30], interval=1, tz=None))
@@ -237,9 +276,12 @@ for planet_name, planet in planets.iteritems():
         ax.set_title(date)
         ax.set_xlabel('Time (UT)')
         ax.set_ylabel('RV [m/s]')
-        ax.plot(plot_bjd, RV, color='black')
-        ax.set_xlim(plot_bjd[0], plot_bjd[-1])
+        ax.plot(plot_bjd, RV, color='black', label='Planet '+planet_name)
+        if multiplanets:
+            ax.plot(plot_bjd, RV_all, color='red',  label='All planets')
 
+        ax.set_xlim(plot_bjd[0], plot_bjd[-1])
+        plt.legend(facecolor='white')
 
         fig.savefig(yaml_name + '_' + date + '_' + planet_name + '.pdf', bbox_inches='tight', dpi=300)
-
+        plt.close()
