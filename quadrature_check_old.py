@@ -62,6 +62,14 @@ if 'plot_planets' not in config_in: config_in['plot_planets'] = planets
 for planet_name, planet in planets.items():
 
     if 'R' not in planet: planet['R'] = 2.6
+    if 'e' not in planet:
+        planet['keplerian'] = True
+        planet['e'] = 0.00000
+    else:
+        planet['e'] = False
+
+    if 'o' not in planet: planet['o'] = np.asarray(np.pi/2.)
+    if 'i' not in planet: planet['i'] = 90.000
     if 'K' not in planet: planet['K'] = 1.000
 
     if 'quadrature_window' not in planet: planet['quadrature_window'] = config_in['quadrature_window']
@@ -71,6 +79,16 @@ for planet_name, planet in planets.items():
         planet['user_phase'] = [0.6, 0.01]
     else:
         planet['print_phase'] = True
+
+    planet['T0'] = (planet['Tc'] - config_in['Tref']) % planet['P']
+    planet['f'] = np.pi/2.
+    if planet['T0'] != 0.0:
+        p0 = 0.000
+        plsq = leastsq(phase_calc, p0, args=(planet['T0'], planet['P'], planet['e'], planet['o']))
+        planet['f'] = plsq[0][0]
+        if planet['f'] < 0.00:
+            planet['f'] += 2 * np.pi
+    planet['mA'] = planet['f'] - planet['o']
 
 #for planet_name, planet in planets.items():
 for planet_name in config_in['plot_planets']:
@@ -82,10 +100,10 @@ for planet_name in config_in['plot_planets']:
     print(' *** Planet ', planet_name, ' *** ')
 
     single_orbit_bjd = np.arange(-0.5, 1.5, 0.001, dtype=np.double)
-    single_orbit_RV = -1. * np.sin(2*np.pi *  single_orbit_bjd) # Period 1 d, semiapmplitude = 1 m/s
+    single_orbit_RV = kp.kepler_RV_T0P(single_orbit_bjd, planet['f'], 1.00000, 1.0000, planet['e'], planet['o'])
 
     single_orbit_1period_bjd = np.arange(0.0, 1.0, 0.001, dtype=np.double)
-    single_orbit_1period_RV = -1. * np.sin(2*np.pi *  single_orbit_1period_bjd) # Period 1 d, semiapmplitude = 1 m/s
+    single_orbit_1period_RV = kp.kepler_RV_T0P(single_orbit_1period_bjd, planet['f'], 1.00000, 1.0000, planet['e'], planet['o'])
 
     #upper_quad = [single_orbit_bjd[np.where(single_orbit_RV > 1.0-planet['quadrature_window'])[0][0]],
     #              single_orbit_bjd[np.where(single_orbit_RV > 1.0-planet['quadrature_window'])[0][-1]]]
@@ -141,12 +159,14 @@ for planet_name in config_in['plot_planets']:
         visibility_interval = [date_visibility.jd[0], date_visibility.jd[0]+config_in['visibility_duration']/24.]
 
         bjd= np.arange(observing_interval[0], observing_interval[1], planet['P']/100.)
-        RV = - planet['K'] *  np.sin(2*np.pi* (bjd-planet['Tc'])/planet['P'])
+        RV = kp.kepler_RV_T0P(bjd-config_in['Tref'], planet['f'], planet['P'], planet['K'], planet['e'], planet['o'])
 
         if multiplanets:
             RV_all = RV * 0.0
             for pp_name, pp in planets.items():
-                RV_all -= pp['K'] * np.sin(2*np.pi* (bjd-pp['Tc'])/pp['P'])
+                RV_all += kp.kepler_RV_T0P(bjd-config_in['Tref'], pp['f'], pp['P'], pp['K'], pp['e'], pp['o'])
+
+
 
 
         user_pos = -1
@@ -165,7 +185,7 @@ for planet_name in config_in['plot_planets']:
         obs_times = open(yaml_name + '_' + date + '_' + planet_name + '.dat', 'w')
         obs_times.write(' ---------- night: '+ date + ' ----------  \n')
 
-        index_ref = [int((i-planet['Tc']) / planet['P']) for i in observing_interval]
+        index_ref = [int((i-config_in['Tref']) / planet['P']) for i in observing_interval]
 
 
         before_rising = [dateutil.parser.parse(date+'T'+config_in['night_start']),
@@ -180,9 +200,9 @@ for planet_name in config_in['plot_planets']:
         ax.fill_between(after_setting, 0, 1, facecolor='black', alpha=0.7, transform=trans, zorder=10)
 
         for ii in range(index_ref[0]-1, index_ref[1]+1):
-            upper_quad_day = [(i+ii)*planet['P']+planet['Tc'] for i in upper_quad]
-            lower_quad_day = [(i+ii)*planet['P']+planet['Tc'] for i in lower_quad]
-            input_user_day = [(i + ii) * planet['P'] + planet['Tc'] for i in input_user]
+            upper_quad_day = [(i+ii)*planet['P']+config_in['Tref'] for i in upper_quad]
+            lower_quad_day = [(i+ii)*planet['P']+config_in['Tref'] for i in lower_quad]
+            input_user_day = [(i + ii) * planet['P'] + config_in['Tref'] for i in input_user]
 
             t_upper_quad = Time(upper_quad_day, format='jd')
             t_lower_quad = Time(lower_quad_day, format='jd')
