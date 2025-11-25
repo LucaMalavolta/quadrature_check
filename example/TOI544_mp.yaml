@@ -1,0 +1,18 @@
+planets:
+  b:
+    P: 1.548352
+    Tc: 2457772.12388400
+    K: 2.17
+    user_phase: [0.5, 0.1]
+  c:
+    P: 50.089
+    Tc: 2459211.973939
+    K: 6.00
+    user_phase: [0.5, 0.1]
+Tref: 2458000.000
+user_phase: [0.5, 0.1]
+dates: ['2024-01-20','2024-01-21', '2024-01-22', '2024-01-23']
+night_start: '20:00'
+night_duration: 10.0
+visibility_start: '20:00'
+visibility_duration: 5.00
