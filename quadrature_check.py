@@ -68,7 +68,7 @@ for planet_name, planet in planets.items():
 
     if 'user_phase' not in planet:
         planet['print_phase'] = False
-        planet['user_phase'] = [0.6, 0.01]
+        planet['user_phase'] = [0.50, 0.01]
     else:
         planet['print_phase'] = True
 
